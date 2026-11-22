@@ -1,6 +1,4 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
+<!DOCTYPE html><html lang="ru"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -141,7 +139,7 @@
   <div class="level-box">
     <div class="lvl" id="level">Уровень 1</div>
     <div class="bar"><div id="levelBar" style="width:0%"></div></div>
-    <div class="label" id="levelNext" style="font-size:11px">до следующего уровня</div>
+    <div class="label" id="levelNext" style="font-size:11px">ещё 100 до уровня 2</div>
   </div>
 </div>
 
@@ -149,14 +147,14 @@
   <!-- ЗАДАНИЯ -->
   <section id="view-tasks">
     <div class="section-title">Задания на сегодня</div>
-    <div id="taskList"></div>
-    <div class="section-title">Выполнено сегодня: <span id="doneCount">0</span></div>
+    <div id="taskList"><div class="card task"><div class="emoji">🛏️</div><div class="info"><div class="name">Заправить кровать</div><div class="pts">+5 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">🦷</div><div class="info"><div class="name">Почистить зубы утром и вечером</div><div class="pts">+5 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">📚</div><div class="info"><div class="name">Сделать уроки</div><div class="pts">+20 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">📖</div><div class="info"><div class="name">Прочитать 10 страниц</div><div class="pts">+15 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">🧸</div><div class="info"><div class="name">Убрать игрушки</div><div class="pts">+10 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">🥗</div><div class="info"><div class="name">Съесть всё за обедом</div><div class="pts">+5 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div></div>
+    <div class="section-title">Выполнено сегодня: <span id="doneCount">0 из 6</span></div>
   </section>
 
   <!-- МАГАЗИН -->
   <section id="view-shop" class="hide">
     <div class="section-title">Магазин наград</div>
-    <div id="shopList"></div>
+    <div id="shopList"><div class="card reward"><div class="emoji">📺</div><div class="info"><div class="name">Мультик 30 минут</div><div class="price">20 баллов</div></div><button class="btn btn-buy" disabled="">Купить</button></div><div class="card reward"><div class="emoji">🍦</div><div class="info"><div class="name">Мороженое</div><div class="price">40 баллов</div></div><button class="btn btn-buy" disabled="">Купить</button></div><div class="card reward"><div class="emoji">🌙</div><div class="info"><div class="name">Поздний отбой +30 минут</div><div class="price">50 баллов</div></div><button class="btn btn-buy" disabled="">Купить</button></div><div class="card reward"><div class="emoji">🎡</div><div class="info"><div class="name">Прогулка в парк</div><div class="price">80 баллов</div></div><button class="btn btn-buy" disabled="">Купить</button></div><div class="card reward"><div class="emoji">🧩</div><div class="info"><div class="name">Новая игрушка или книга</div><div class="price">150 баллов</div></div><button class="btn btn-buy" disabled="">Купить</button></div></div>
   </section>
 
   <!-- ПРОГРЕСС -->
@@ -169,7 +167,7 @@
       <div class="stat"><span>Наград получено</span><b id="stRewards">0</b></div>
     </div>
     <div class="section-title">Купленные награды</div>
-    <div class="card" id="purchaseList"></div>
+    <div class="card" id="purchaseList"><div class="empty">Пока ничего не куплено — баллы ждут!</div></div>
   </section>
 
   <!-- РОДИТЕЛЯМ -->
@@ -271,7 +269,11 @@ function load() {
   if (typeof s.bgPhoto === 'undefined') s.bgPhoto = null;
   return s;
 }
-function save() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); pushCloud(); }
+function save(push) {
+  if (push !== false && !applying) state.updatedAt = Date.now();
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  if (push !== false && !applying) pushCloud();
+}
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 function levelOf(total) { return Math.floor(total / LEVEL_STEP) + 1; }
@@ -496,6 +498,7 @@ function clearPhoto() {
 
 let sb = null;
 let pushTimer = null;
+let applying = false;
 
 function initCloud() {
   if (!window.supabase) { return; }
@@ -515,7 +518,7 @@ function initCloud() {
 function cloudCopy() {
   const copy = Object.assign({}, state);
   delete copy.bgPhoto;
-  copy.updatedAt = Date.now();
+  copy.updatedAt = state.updatedAt || Date.now();
   return copy;
 }
 
@@ -548,7 +551,9 @@ async function pullCloud(initial) {
     if (!state.rewards) state.rewards = DEFAULT_REWARDS;
     if (!state.purchases) state.purchases = [];
     if (state.day !== todayStr()) { state.day = todayStr(); state.doneToday = {}; }
+    applying = true;
     render();
+    applying = false;
   } catch (e) { setCloudStatus(false); }
 }
 
@@ -574,5 +579,6 @@ if (!state.name) {
 initCloud();
 render();
 </script>
-</body>
-</html>
+
+
+</body></html>
