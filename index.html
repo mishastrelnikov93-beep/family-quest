@@ -112,6 +112,14 @@
   .hide { display: none !important; }
   .danger { background: #ffe8e8; color: #e74c3c; margin-top: 8px; width: 100%; }
   .muted { color: #9b8fc4; font-size: 13px; margin-top: 8px; line-height: 1.5; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chips button { border: 2px solid #e6e0ff; background: #fff; border-radius: 99px; padding: 6px 10px; font-family: inherit; font-weight: 700; font-size: 13px; color: #9b8fc4; cursor: pointer; }
+  .chips button.on { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
+  .mrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed #eee7ff; }
+  .mrow:last-child { border-bottom: none; }
+  .mrow .sched { font-size: 12px; color: #9b8fc4; margin-top: 2px; }
+  .mrow .mini { border: none; background: #f0ecff; color: #6c5ce7; border-radius: 10px; padding: 7px 9px; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .mrow .mini.del { background: #ffe8e8; color: #e74c3c; }
   body.theme-unicorn { background: linear-gradient(160deg, #ffe3f1 0%, #f3e0ff 50%, #e0eaff 100%); }
   .bg-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; opacity: .5; }
   .bg-layer span { position: absolute; animation: floaty 9s ease-in-out infinite; }
@@ -172,17 +180,21 @@
 
   <!-- РОДИТЕЛЯМ -->
   <section id="view-admin" class="hide">
-    <div class="section-title">Добавить задание</div>
+    <div class="section-title">Задание: добавить или изменить</div>
     <div class="card">
       <div class="form-row">
         <input id="newTaskEmoji" class="emoji-input" placeholder="🙂" maxlength="4">
         <input id="newTaskName" placeholder="Что сделать? Например: полить цветы">
       </div>
+      <div class="chips" id="dayChips"></div>
       <div class="form-row">
         <input id="newTaskPoints" type="number" min="1" max="100" placeholder="Баллов (1–100)">
-        <button class="btn btn-ok" onclick="addTask()">Добавить</button>
+        <button class="btn btn-ok" id="taskSaveBtn" onclick="saveTaskForm()">Добавить</button>
       </div>
+      <div class="muted">Не выбрали дни — задание будет появляться каждый день. Хотите пустой календарь и задания по расписанию — выберите конкретные дни недели.</div>
     </div>
+    <div class="section-title">Все задания</div>
+    <div class="card" id="taskManager"></div>
     <div class="section-title">Добавить награду</div>
     <div class="card">
       <div class="form-row">
@@ -299,9 +311,14 @@ function render() {
   document.getElementById('levelNext').textContent = 'ещё ' + (LEVEL_STEP - state.totalEarned % LEVEL_STEP) + ' до уровня ' + (lvl + 1);
 
   // tasks
+  const wday = new Date().getDay();
+  const todayTasks = state.tasks.filter(t => !t.days || !t.days.length || t.days.indexOf(wday) !== -1);
   const tl = document.getElementById('taskList');
   tl.innerHTML = '';
-  state.tasks.forEach(t => {
+  if (!todayTasks.length) {
+    tl.innerHTML = '<div class="card"><div class="empty">Сегодня заданий нет — отдыхаем! 🎈</div></div>';
+  }
+  todayTasks.forEach(t => {
     const done = !!state.doneToday[t.id];
     const div = document.createElement('div');
     div.className = 'card task' + (done ? ' done' : '');
@@ -314,7 +331,9 @@ function render() {
     div.appendChild(btn);
     tl.appendChild(div);
   });
-  document.getElementById('doneCount').textContent = Object.keys(state.doneToday).length + ' из ' + state.tasks.length;
+  const doneNow = Object.keys(state.doneToday).filter(id => todayTasks.some(t => t.id === id)).length;
+  document.getElementById('doneCount').textContent = doneNow + ' из ' + todayTasks.length;
+  renderTaskManager();
 
   // shop
   const sl = document.getElementById('shopList');
@@ -377,15 +396,101 @@ function buy(r) {
   render();
 }
 
-function addTask() {
+const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+let pickedDays = [];
+let editTaskId = null;
+
+function dayChipsRender() {
+  const box = document.getElementById('dayChips');
+  if (!box) return;
+  box.innerHTML = '';
+  [1, 2, 3, 4, 5, 6, 0].forEach(w => {
+    const b = document.createElement('button');
+    b.textContent = DAY_NAMES[w];
+    if (pickedDays.indexOf(w) !== -1) b.classList.add('on');
+    b.onclick = () => {
+      pickedDays = pickedDays.indexOf(w) !== -1 ? pickedDays.filter(x => x !== w) : pickedDays.concat(w);
+      dayChipsRender();
+    };
+    box.appendChild(b);
+  });
+}
+
+function schedText(days) {
+  if (!days || !days.length) return 'каждый день';
+  return days.slice().sort((a, b) => a - b).map(w => DAY_NAMES[w]).join(', ');
+}
+
+function saveTaskForm() {
   const e = document.getElementById('newTaskEmoji').value.trim() || '⭐';
   const n = document.getElementById('newTaskName').value.trim();
   const p = parseInt(document.getElementById('newTaskPoints').value, 10);
   if (!n || !p || p < 1) { showToast('Заполни название и баллы'); return; }
-  state.tasks.push({ id: 't' + Date.now(), emoji: e, name: n, points: p });
+  if (editTaskId) {
+    const t = state.tasks.find(x => x.id === editTaskId);
+    if (t) { t.emoji = e; t.name = n; t.points = p; t.days = pickedDays.slice(); }
+    showToast('Задание обновлено ✅');
+    editTaskId = null;
+    document.getElementById('taskSaveBtn').textContent = 'Добавить';
+  } else {
+    state.tasks.push({ id: 't' + Date.now(), emoji: e, name: n, points: p, days: pickedDays.slice() });
+    showToast('Задание добавлено ✅');
+  }
   ['newTaskEmoji', 'newTaskName', 'newTaskPoints'].forEach(id => document.getElementById(id).value = '');
-  showToast('Задание добавлено ✅');
+  pickedDays = [];
+  dayChipsRender();
   render();
+}
+
+function editTask(id) {
+  const t = state.tasks.find(x => x.id === id);
+  if (!t) return;
+  editTaskId = id;
+  pickedDays = (t.days || []).slice();
+  document.getElementById('newTaskEmoji').value = t.emoji;
+  document.getElementById('newTaskName').value = t.name;
+  document.getElementById('newTaskPoints').value = t.points;
+  document.getElementById('taskSaveBtn').textContent = 'Сохранить';
+  dayChipsRender();
+  showToast('Правим задание ✏️');
+}
+
+function deleteTask(id) {
+  const t = state.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (!confirm('Удалить задание «' + t.name + '»?')) return;
+  state.tasks = state.tasks.filter(x => x.id !== id);
+  delete state.doneToday[id];
+  showToast('Задание удалено 🗑️');
+  render();
+}
+
+function renderTaskManager() {
+  const tm = document.getElementById('taskManager');
+  if (!tm) return;
+  tm.innerHTML = '';
+  if (!state.tasks.length) {
+    tm.innerHTML = '<div class="empty">Заданий пока нет — добавьте первое!</div>';
+    return;
+  }
+  state.tasks.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'mrow';
+    row.innerHTML = '<span style="font-size:22px">' + t.emoji + '</span>' +
+      '<div class="info"><div style="font-weight:700">' + escapeHtml(t.name) + '</div>' +
+      '<div class="sched">+' + t.points + ' б. · ' + schedText(t.days) + '</div></div>';
+    const ed = document.createElement('button');
+    ed.className = 'mini';
+    ed.textContent = '✏️';
+    ed.onclick = () => editTask(t.id);
+    const de = document.createElement('button');
+    de.className = 'mini del';
+    de.textContent = '🗑️';
+    de.onclick = () => deleteTask(t.id);
+    row.appendChild(ed);
+    row.appendChild(de);
+    tm.appendChild(row);
+  });
 }
 
 function addReward() {
@@ -576,6 +681,7 @@ if (!state.name) {
   if (n) state.name = n.trim();
   save();
 }
+dayChipsRender();
 initCloud();
 render();
 </script>
