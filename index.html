@@ -136,6 +136,7 @@
   <div>
     <div class="big" id="points">0</div>
     <div class="label">баллов сейчас</div>
+    <div class="label" id="cloudStatus" style="margin-top:2px"></div>
   </div>
   <div class="level-box">
     <div class="lvl" id="level">Уровень 1</div>
@@ -228,10 +229,13 @@
   <button data-view="admin" id="tabAdmin" onclick="showView('admin')"><span>👨‍👩‍👧</span><span class="tab-name">Родителям</span></button>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const STORE_KEY = 'familyQuest_v1';
 const LEVEL_STEP = 100;
 const IS_KID = new URLSearchParams(location.search).get('mode') === 'kid';
+const SUPABASE_URL = 'https://bihpuukwopbgfyrvakiv.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_9xIszndv0coC2OnCc3CrDQ_9qocqtVj';
 
 const DEFAULT_TASKS = [
   { id: 't1', emoji: '🛏️', name: 'Заправить кровать', points: 5 },
@@ -267,7 +271,7 @@ function load() {
   if (typeof s.bgPhoto === 'undefined') s.bgPhoto = null;
   return s;
 }
-function save() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+function save() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); pushCloud(); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 function levelOf(total) { return Math.floor(total / LEVEL_STEP) + 1; }
@@ -490,6 +494,70 @@ function clearPhoto() {
   showToast('Фон убран');
 }
 
+let sb = null;
+let pushTimer = null;
+
+function initCloud() {
+  if (!window.supabase) { return; }
+  try {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  } catch (e) { return; }
+  setCloudStatus('loading');
+  pullCloud(true);
+  sb.channel('family-quest-sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'family_state' }, function () { pullCloud(false); })
+    .subscribe(function (status) {
+      if (status === 'SUBSCRIBED') setCloudStatus(true);
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setCloudStatus(false);
+    });
+}
+
+function cloudCopy() {
+  const copy = Object.assign({}, state);
+  delete copy.bgPhoto;
+  copy.updatedAt = Date.now();
+  return copy;
+}
+
+function pushCloud() {
+  if (!sb) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async function () {
+    try {
+      await sb.from('family_state').upsert({ id: 'main', data: cloudCopy() });
+      setCloudStatus(true);
+    } catch (e) { setCloudStatus(false); }
+  }, 500);
+}
+
+async function pullCloud(initial) {
+  if (!sb) return;
+  try {
+    const res = await sb.from('family_state').select('data').eq('id', 'main').maybeSingle();
+    if (res.error) { setCloudStatus(false); return; }
+    if (initial && (!res.data || !res.data.data)) { pushCloud(); setCloudStatus(true); return; }
+    const cloud = res.data && res.data.data;
+    if (!cloud) return;
+    if (cloud.updatedAt && state.updatedAt && cloud.updatedAt <= state.updatedAt) return;
+    const keepPhoto = state.bgPhoto;
+    const keepTheme = state.theme;
+    Object.assign(state, cloud);
+    state.bgPhoto = keepPhoto || null;
+    state.theme = keepTheme || 'soft';
+    if (!state.tasks) state.tasks = DEFAULT_TASKS;
+    if (!state.rewards) state.rewards = DEFAULT_REWARDS;
+    if (!state.purchases) state.purchases = [];
+    if (state.day !== todayStr()) { state.day = todayStr(); state.doneToday = {}; }
+    render();
+  } catch (e) { setCloudStatus(false); }
+}
+
+function setCloudStatus(on) {
+  const el = document.getElementById('cloudStatus');
+  if (!el) return;
+  el.textContent = on === true ? '☁️ облако подключено' : on === 'loading' ? '☁️ подключение…' : '';
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 }
@@ -503,6 +571,7 @@ if (!state.name) {
   if (n) state.name = n.trim();
   save();
 }
+initCloud();
 render();
 </script>
 </body>
