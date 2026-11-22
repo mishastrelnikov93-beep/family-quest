@@ -120,6 +120,26 @@
   .mrow .sched { font-size: 12px; color: #9b8fc4; margin-top: 2px; }
   .mrow .mini { border: none; background: #f0ecff; color: #6c5ce7; border-radius: 10px; padding: 7px 9px; font-size: 14px; cursor: pointer; font-family: inherit; }
   .mrow .mini.del { background: #ffe8e8; color: #e74c3c; }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; }
+  .cal-title { font-weight: 800; font-size: 17px; color: #6c5ce7; }
+  .cal-nav { display: flex; gap: 8px; }
+  .cal-nav button { border: none; background: #f0ecff; color: #6c5ce7; border-radius: 12px; width: 36px; height: 36px; font-size: 18px; cursor: pointer; font-family: inherit; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+  .cal-dow { text-align: center; font-size: 11px; font-weight: 800; color: #9b8fc4; padding: 4px 0; }
+  .cal-cell { background: #fff; border-radius: 10px; min-height: 54px; padding: 4px 5px; box-shadow: 0 2px 8px rgba(80,70,140,.06); cursor: pointer; border: 2px solid transparent; text-align: left; }
+  .cal-cell .num { font-size: 12px; font-weight: 800; color: #3d3a5c; }
+  .cal-cell .ems { font-size: 11px; line-height: 1.3; margin-top: 2px; min-height: 15px; }
+  .cal-cell .cnt { font-size: 10px; color: #9b8fc4; font-weight: 700; }
+  .cal-cell.out { visibility: hidden; pointer-events: none; }
+  .cal-cell.today { border-color: #6c5ce7; }
+  .cal-cell.today .num { color: #6c5ce7; }
+  .cal-cell.past { opacity: .8; }
+  .cal-cell.alldone { background: #e8f8ef; }
+  .cal-detail-title { font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+  .cal-detail-title .rel { color: #9b8fc4; font-size: 12px; font-weight: 700; margin-left: 4px; }
+  .st-done { color: #27ae60; font-weight: 800; }
+  .st-miss { color: #e74c3c; font-weight: 800; }
+  .st-fut { color: #9b8fc4; font-weight: 800; }
   body.theme-unicorn { background: linear-gradient(160deg, #ffe3f1 0%, #f3e0ff 50%, #e0eaff 100%); }
   .bg-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; opacity: .5; }
   .bg-layer span { position: absolute; animation: floaty 9s ease-in-out infinite; }
@@ -157,6 +177,21 @@
     <div class="section-title">Задания на сегодня</div>
     <div id="taskList"><div class="card task"><div class="emoji">🛏️</div><div class="info"><div class="name">Заправить кровать</div><div class="pts">+5 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">🦷</div><div class="info"><div class="name">Почистить зубы утром и вечером</div><div class="pts">+5 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">📚</div><div class="info"><div class="name">Сделать уроки</div><div class="pts">+20 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">📖</div><div class="info"><div class="name">Прочитать 10 страниц</div><div class="pts">+15 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">🧸</div><div class="info"><div class="name">Убрать игрушки</div><div class="pts">+10 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div><div class="card task"><div class="emoji">🥗</div><div class="info"><div class="name">Съесть всё за обедом</div><div class="pts">+5 баллов</div></div><button class="btn btn-ok">Выполнено!</button></div></div>
     <div class="section-title">Выполнено сегодня: <span id="doneCount">0 из 6</span></div>
+  </section>
+
+  <!-- КАЛЕНДАРЬ -->
+  <section id="view-cal" class="hide">
+    <div class="card">
+      <div class="cal-head">
+        <div class="cal-title" id="calTitle">Ноябрь 2026</div>
+        <div class="cal-nav">
+          <button onclick="calPrev()">‹</button>
+          <button onclick="calNext()">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+    <div id="calDetail"></div>
   </section>
 
   <!-- МАГАЗИН -->
@@ -234,6 +269,7 @@
 
 <div class="bottom-bar">
   <button data-view="tasks" class="active" onclick="showView('tasks')"><span>📋</span><span class="tab-name">Задания</span></button>
+  <button data-view="cal" onclick="showView('cal')"><span>📅</span><span class="tab-name">Календарь</span></button>
   <button data-view="shop" onclick="showView('shop')"><span>🎁</span><span class="tab-name">Магазин</span></button>
   <button data-view="progress" onclick="showView('progress')"><span>🏆</span><span class="tab-name">Прогресс</span></button>
   <button data-view="admin" id="tabAdmin" onclick="showView('admin')"><span>👨‍👩‍👧</span><span class="tab-name">Родителям</span></button>
@@ -277,6 +313,7 @@ function load() {
   if (!s.tasks) s.tasks = DEFAULT_TASKS;
   if (!s.rewards) s.rewards = DEFAULT_REWARDS;
   if (!s.purchases) s.purchases = [];
+  if (!s.dayLog) s.dayLog = {};
   if (!s.theme) s.theme = 'soft';
   if (typeof s.bgPhoto === 'undefined') s.bgPhoto = null;
   return s;
@@ -294,7 +331,7 @@ function levelProgress(total) { return (total % LEVEL_STEP) / LEVEL_STEP * 100; 
 function showView(v) {
   if (v === 'admin' && IS_KID) return;
   currentView = v;
-  ['tasks', 'shop', 'progress', 'admin'].forEach(x => {
+  ['tasks', 'cal', 'shop', 'progress', 'admin'].forEach(x => {
     document.getElementById('view-' + x).classList.toggle('hide', x !== v);
   });
   document.querySelectorAll('.bottom-bar button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
@@ -334,6 +371,7 @@ function render() {
   const doneNow = Object.keys(state.doneToday).filter(id => todayTasks.some(t => t.id === id)).length;
   document.getElementById('doneCount').textContent = doneNow + ' из ' + todayTasks.length;
   renderTaskManager();
+  renderCalendar();
 
   // shop
   const sl = document.getElementById('shopList');
@@ -370,14 +408,108 @@ function render() {
   save();
 }
 
+const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const DOW_FULL = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+let calYear = null, calMonth = null, selDate = null;
+
+function calInit() {
+  const d = new Date();
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  selDate = todayStr();
+}
+
+function dstr(y, m, d) {
+  return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+
+function tasksForDate(y, m, d) {
+  const w = new Date(y, m, d).getDay();
+  return state.tasks.filter(t => !t.days || !t.days.length || t.days.indexOf(w) !== -1);
+}
+
+function calPrev() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); }
+function calNext() { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); }
+
+function renderCalendar() {
+  if (calYear === null) calInit();
+  document.getElementById('calTitle').textContent = MONTHS[calMonth] + ' ' + calYear;
+  const grid = document.getElementById('calGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].forEach(n => {
+    const h = document.createElement('div');
+    h.className = 'cal-dow';
+    h.textContent = n;
+    grid.appendChild(h);
+  });
+  const first = new Date(calYear, calMonth, 1).getDay();
+  const offset = (first + 6) % 7;
+  const dim = new Date(calYear, calMonth + 1, 0).getDate();
+  const now = new Date();
+  const today = dstr(now.getFullYear(), now.getMonth(), now.getDate());
+  for (let i = 0; i < offset; i++) {
+    const pad = document.createElement('div');
+    pad.className = 'cal-cell out';
+    grid.appendChild(pad);
+  }
+  for (let d = 1; d <= dim; d++) {
+    const key = dstr(calYear, calMonth, d);
+    const list = tasksForDate(calYear, calMonth, d);
+    const isPast = key < today;
+    const isToday = key === today;
+    const trackable = isPast || isToday;
+    const doneCount = trackable ? list.filter(t => state.dayLog[key] && state.dayLog[key][t.id]).length : 0;
+    const allDone = trackable && list.length > 0 && doneCount === list.length;
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell' + (isToday ? ' today' : '') + (isPast ? ' past' : '') + (allDone ? ' alldone' : '');
+    let ems = list.slice(0, 3).map(t => t.emoji).join('');
+    if (list.length > 3) ems += '+' + (list.length - 3);
+    cell.innerHTML = '<div class="num">' + d + '</div><div class="ems">' + ems + '</div>' +
+      (trackable && list.length ? '<div class="cnt">' + doneCount + '/' + list.length + '</div>' : '');
+    cell.onclick = () => { selDate = key; showDayDetail(); };
+    grid.appendChild(cell);
+  }
+  showDayDetail();
+}
+
+function showDayDetail() {
+  const box = document.getElementById('calDetail');
+  if (!box || !selDate) { if (box) box.innerHTML = ''; return; }
+  const p = selDate.split('-');
+  const y = +p[0], m = +p[1] - 1, d = +p[2];
+  const list = tasksForDate(y, m, d);
+  const today = todayStr();
+  const rel = selDate === today ? 'сегодня' : selDate > today ? 'скоро' : 'уже прошло';
+  const dt = new Date(y, m, d);
+  const dw = DOW_FULL[dt.getDay()];
+  let html = '<div class="card"><div class="cal-detail-title">' + dw.charAt(0).toUpperCase() + dw.slice(1) + ', ' + d + ' ' + MONTHS[m].toLowerCase() + ' <span class="rel">' + rel + '</span></div>';
+  if (!list.length) {
+    html += '<div class="empty">Заданий на этот день нет 🎈</div></div>';
+    box.innerHTML = html;
+    return;
+  }
+  list.forEach(t => {
+    const done = !!(state.dayLog[selDate] && state.dayLog[selDate][t.id]);
+    const future = selDate > today;
+    const st = future ? '<span class="st-fut">предстоит</span>' : done ? '<span class="st-done">выполнено ✓</span>' : '<span class="st-miss">не выполнено</span>';
+    html += '<div class="mrow"><span style="font-size:22px">' + t.emoji + '</span><div class="info"><div style="font-weight:700">' + escapeHtml(t.name) + '</div><div class="sched">+' + t.points + ' б. · ' + st + '</div></div></div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
+}
+
 function toggleTask(t) {
   if (state.doneToday[t.id]) {
     state.doneToday[t.id] = false; delete state.doneToday[t.id];
+    if (state.dayLog[todayStr()]) delete state.dayLog[todayStr()][t.id];
     state.points = Math.max(0, state.points - t.points);
     state.totalEarned = Math.max(0, state.totalEarned - t.points);
     state.tasksDone = Math.max(0, state.tasksDone - 1);
   } else {
     state.doneToday[t.id] = true;
+    if (!state.dayLog[todayStr()]) state.dayLog[todayStr()] = {};
+    state.dayLog[todayStr()][t.id] = true;
     state.points += t.points;
     state.totalEarned += t.points;
     state.tasksDone += 1;
@@ -655,6 +787,7 @@ async function pullCloud(initial) {
     if (!state.tasks) state.tasks = DEFAULT_TASKS;
     if (!state.rewards) state.rewards = DEFAULT_REWARDS;
     if (!state.purchases) state.purchases = [];
+    if (!state.dayLog) state.dayLog = {};
     if (state.day !== todayStr()) { state.day = todayStr(); state.doneToday = {}; }
     applying = true;
     render();
