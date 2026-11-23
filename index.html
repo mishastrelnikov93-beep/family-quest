@@ -79,9 +79,14 @@
   .reward .info { flex: 1; }
   .reward .name { font-weight: 700; }
   .reward .price { color: #f39c12; font-weight: 800; font-size: 13px; }
-  .reward .pbar { margin-top: 6px; height: 8px; background: #efeaff; border-radius: 99px; overflow: hidden; }
-  .reward .pbar > div { height: 100%; background: linear-gradient(90deg, #6c5ce7, #a55eea); border-radius: 99px; transition: width .5s; }
-  .reward .prest { font-size: 11px; color: #9b8fc4; font-weight: 700; text-align: right; margin-top: 2px; }
+  .pbar { margin-top: 6px; height: 8px; background: #efeaff; border-radius: 99px; overflow: hidden; }
+  .pbar > div { height: 100%; background: linear-gradient(90deg, #6c5ce7, #a55eea); border-radius: 99px; transition: width .5s; }
+  .prest { font-size: 11px; color: #9b8fc4; font-weight: 700; text-align: right; margin-top: 2px; }
+  .ach-lanes { margin-top: 8px; }
+  .ach-lane { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #eee7ff; }
+  .ach-lane:last-child { border-bottom: none; }
+  .ach-lane .e { font-size: 24px; }
+  .ach-lane .t { font-size: 13px; font-weight: 800; }
 
   .stat { display: flex; justify-content: space-between; padding: 10px 4px; border-bottom: 1px dashed #eee7ff; font-size: 15px; }
   .stat:last-child { border-bottom: none; }
@@ -1071,6 +1076,18 @@ function renderAch() {
   entries.forEach(e => {
     const medal = TIER_MEDALS[(e.tier - 1) % TIER_MEDALS.length];
     html += '<div class="ach"><div class="e">' + e.task.emoji + '</div><div class="t">' + escapeHtml(e.title) + '</div><div class="m">' + medal + ' ×' + (e.tier * ACH_TIER) + '</div></div>';
+  });
+  html += '</div><div class="section-title" style="margin-top:14px">Ачивки в пути</div><div class="ach-lanes">';
+  state.tasks.forEach(t => {
+    const c = state.perCounts[t.id] || 0;
+    const nextTier = Math.floor(c / ACH_TIER) + 1;
+    const need = nextTier * ACH_TIER;
+    const doneNow = c - (nextTier - 1) * ACH_TIER;
+    const pct = Math.max(0, Math.min(100, Math.round(doneNow / ACH_TIER * 100)));
+    const medal = TIER_MEDALS[(nextTier - 1) % TIER_MEDALS.length];
+    html += '<div class="ach-lane"><span class="e">' + t.emoji + '</span><div class="info"><div class="t">' + escapeHtml(achTitleFor(t, nextTier)) + ' <span class="m">' + medal + '</span></div>' +
+      '<div class="pbar"><div style="width:' + pct + '%"></div></div>' +
+      '<div class="prest">осталось ' + (need - c) + ' раз</div></div></div>';
   });
   html += '</div>';
   box.innerHTML = html;
