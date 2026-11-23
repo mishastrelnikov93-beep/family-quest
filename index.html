@@ -148,6 +148,18 @@
   .st-done { color: #27ae60; font-weight: 800; }
   .st-miss { color: #e74c3c; font-weight: 800; }
   .st-fut { color: #9b8fc4; font-weight: 800; }
+  .ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .ach { background: #f8f6ff; border-radius: 14px; padding: 10px 6px; text-align: center; }
+  .ach .e { font-size: 26px; }
+  .ach .t { font-size: 11px; font-weight: 800; color: #3d3a5c; margin-top: 4px; line-height: 1.25; }
+  .ach .m { font-size: 11px; color: #9b8fc4; margin-top: 2px; }
+  .ach-modal { position: fixed; inset: 0; background: rgba(30,25,60,.55); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .ach-modal .inner { background: linear-gradient(135deg, #6c5ce7, #a55eea); color: #fff; border-radius: 24px; padding: 24px; max-width: 340px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(40,30,90,.4); }
+  .ach-modal .med { font-size: 13px; opacity: .9; letter-spacing: 1px; text-transform: uppercase; font-weight: 800; }
+  .ach-modal .big { font-size: 54px; margin: 6px 0; }
+  .ach-modal .t { font-size: 22px; font-weight: 800; margin: 8px 0; }
+  .ach-modal .sub { font-size: 14px; opacity: .95; }
+  .ach-modal button { margin-top: 14px; background: #ffe66d; color: #6b5900; border: none; border-radius: 99px; padding: 10px 26px; font-family: inherit; font-weight: 800; font-size: 15px; cursor: pointer; }
   body.theme-unicorn { background: linear-gradient(160deg, #ffe3f1 0%, #f3e0ff 50%, #e0eaff 100%); }
   .bg-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; opacity: .5; }
   .bg-layer span { position: absolute; animation: floaty 9s ease-in-out infinite; }
@@ -217,6 +229,8 @@
       <div class="stat"><span>Текущий уровень</span><b id="stLevel">1</b></div>
       <div class="stat"><span>Наград получено</span><b id="stRewards">0</b></div>
     </div>
+    <div class="section-title">Мои ачивки</div>
+    <div class="card" id="achList"></div>
     <div class="section-title">Купленные награды</div>
     <div class="card" id="purchaseList"><div class="empty">Пока ничего не куплено — баллы ждут!</div></div>
   </section>
@@ -324,6 +338,17 @@ function load() {
   if (!s.rewards) s.rewards = DEFAULT_REWARDS;
   if (!s.purchases) s.purchases = [];
   if (!s.dayLog) s.dayLog = {};
+  if (!s.perCounts) s.perCounts = {};
+  if (!s.achieved) s.achieved = {};
+  if (Object.keys(s.perCounts).length === 0 && s.dayLog) {
+    const pc = {};
+    Object.keys(s.dayLog).forEach(day => {
+      Object.keys(s.dayLog[day]).forEach(tid => {
+        if (s.tasks.some(t => t.id === tid)) pc[tid] = (pc[tid] || 0) + 1;
+      });
+    });
+    s.perCounts = pc;
+  }
   if (!s.theme) s.theme = 'soft';
   if (typeof s.bgPhoto === 'undefined') s.bgPhoto = null;
   return s;
@@ -383,6 +408,7 @@ function render() {
   renderTaskManager();
   renderRewardManager();
   renderCalendar();
+  renderAch();
 
   // shop
   const sl = document.getElementById('shopList');
@@ -610,6 +636,7 @@ function toggleTask(t) {
   if (state.doneToday[t.id]) {
     state.doneToday[t.id] = false; delete state.doneToday[t.id];
     if (state.dayLog[todayStr()]) delete state.dayLog[todayStr()][t.id];
+    if (state.perCounts[t.id]) state.perCounts[t.id]--;
     state.points = Math.max(0, state.points - t.points);
     state.totalEarned = Math.max(0, state.totalEarned - t.points);
     state.tasksDone = Math.max(0, state.tasksDone - 1);
@@ -617,6 +644,7 @@ function toggleTask(t) {
     state.doneToday[t.id] = true;
     if (!state.dayLog[todayStr()]) state.dayLog[todayStr()] = {};
     state.dayLog[todayStr()][t.id] = true;
+    state.perCounts[t.id] = (state.perCounts[t.id] || 0) + 1;
     state.points += t.points;
     state.totalEarned += t.points;
     state.tasksDone += 1;
@@ -624,6 +652,7 @@ function toggleTask(t) {
     showToast('+' + t.points + ' баллов! Молодец! 🎉');
   }
   render();
+  checkAchievements();
 }
 
 function buy(r) {
@@ -802,8 +831,8 @@ function showToast(text) {
   t._timer = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-function celebrate(emoji) {
-  for (let i = 0; i < 14; i++) {
+function celebrate(emoji, n) {
+  for (let i = 0; i < (n || 14); i++) {
     const c = document.createElement('div');
     c.className = 'confetti';
     c.textContent = ['⭐', '🎉', '✨', emoji][i % 4];
@@ -933,10 +962,13 @@ async function pullCloud(initial) {
     if (!state.rewards) state.rewards = DEFAULT_REWARDS;
     if (!state.purchases) state.purchases = [];
     if (!state.dayLog) state.dayLog = {};
+    if (!state.perCounts) state.perCounts = {};
+    if (!state.achieved) state.achieved = {};
     if (state.day !== todayStr()) { state.day = todayStr(); state.doneToday = {}; }
     applying = true;
     render();
     applying = false;
+    checkAchievements(true);
   } catch (e) { setCloudStatus(false); }
 }
 
@@ -944,6 +976,104 @@ function setCloudStatus(on) {
   const el = document.getElementById('cloudStatus');
   if (!el) return;
   el.textContent = on === true ? '☁️ облако подключено' : on === 'loading' ? '☁️ подключение…' : '';
+}
+
+const ACH_TIER = 5;
+const TIER_MEDALS = ['🥉', '🥈', '🥇', '💎', '👑'];
+const normE = s => String(s || '').replace(/\uFE0F/g, '');
+const SPECIFIC_ACH = {
+  '🛏': ['Крутая застилальщица', 'Мастер постельного дела', 'Генерал кроватных войск', 'Супер-заправщица', 'Легенда постельного фронта'],
+  '🦷': ['Крутой зубочист', 'Блеск и зубной шик', 'Зубная фея одобряет', 'Голливудская улыбка', 'Гроза кариеса'],
+  '🧸': ['Игрушечный спасатель', 'Командир игрушечной армии', 'Порядок в игрушечном царстве', 'Мастер порядка', 'Уборка — моё призвание'],
+  '💋': ['Мамин лучик любви', 'Профессор целования', 'Самая любящая дочка', 'Валентинка на ножках', 'Источник бесконечной любви'],
+  '🎒': ['Первая пятерка', 'Уроков не боится', 'Школьная звезда', 'Профессор уроков', 'Знаток всех предметов'],
+  '⛳': ['Лизка красотка', 'Спортсменка и чемпионка', 'Силач-спринтер', 'Олимпийка уже в пути', 'Легенда спорта'],
+  '📱': ['Hello, английский!', 'Полиглот-стажёр', 'Я говорю по-английски', 'Miss English', 'Переводчица мирового уровня'],
+  '🏒': ['Шайбу! Шайбу!', 'Клюшка и слава', 'Мастер ледовой арены', 'Капитан хоккейной команды', 'Звезда хоккея'],
+  '🎭': ['Первая звездочка сцены', 'Танцую, значит живу', 'Королева танцпола', 'Балерина на пуантах', 'Примадонна танцев'],
+  '⭐': ['Сонная красавица', 'Тишина — спит Лиза', 'Мастер режима сна', 'Ложится раньше всех', 'Королева сладких снов'],
+  '🍽': ['Помощник официанта', 'Чистый стол — мой друг', 'Генеральная уборка стола', 'Хозяйка кухни', 'Идеальный порядок за столом']
+};
+const GENERIC_ACH = ['Легенда этого дела', 'Супергерой задания', 'Непобедимая!', 'Королева практики', 'Магия повторения'];
+const KIND_WORDS = ['Ты самая лучшая! 💖', 'Мама и папа гордятся!', 'Так держать, Лиза!', 'Ты справляешься как профи!', 'Ни у кого так не получается!', 'Вау, это уровень!', 'Дальше будет ещё круче!'];
+
+function achTitleFor(task, tier) {
+  const arr = SPECIFIC_ACH[normE(task.emoji)];
+  if (arr && tier <= arr.length) return arr[tier - 1];
+  if (arr) return GENERIC_ACH[(tier - arr.length - 1) % GENERIC_ACH.length];
+  return GENERIC_ACH[(tier - 1) % GENERIC_ACH.length];
+}
+
+function checkAchievements(silent) {
+  const fresh = [];
+  state.tasks.forEach(t => {
+    const c = state.perCounts[t.id] || 0;
+    const tiers = Math.floor(c / ACH_TIER);
+    for (let n = 1; n <= tiers; n++) {
+      const id = t.id + '_ach' + n;
+      if (!state.achieved[id]) {
+        state.achieved[id] = Date.now();
+        fresh.push({ task: t, tier: n, title: achTitleFor(t, n) });
+      }
+    }
+  });
+  if (!fresh.length) return;
+  save();
+  render();
+  if (!silent) {
+    const f = fresh[0];
+    showAchModal(f);
+    celebrate(f.task.emoji, 40);
+    if (fresh.length > 1) showToast('И ещё ' + (fresh.length - 1) + ' ачивок! 🏆');
+  }
+}
+
+function showAchModal(f) {
+  const old = document.getElementById('achModal');
+  if (old) old.remove();
+  const nice = KIND_WORDS[Math.floor(Math.random() * KIND_WORDS.length)];
+  const medal = TIER_MEDALS[(f.tier - 1) % TIER_MEDALS.length];
+  const div = document.createElement('div');
+  div.className = 'ach-modal';
+  div.id = 'achModal';
+  div.innerHTML = '<div class="inner"><div class="med">' + medal + ' ачивка!</div>' +
+    '<div class="big">' + f.task.emoji + '</div>' +
+    '<div class="t">' + escapeHtml(f.title) + '</div>' +
+    '<div class="sub">Выполнено «' + escapeHtml(f.task.name) + '» ' + (f.tier * ACH_TIER) + ' раз!</div>' +
+    '<div class="sub" style="margin-top:8px">' + nice + '</div>' +
+    '<button onclick="closeAchModal()">Ура! 🎉</button></div>';
+  document.body.appendChild(div);
+}
+
+function closeAchModal() {
+  const m = document.getElementById('achModal');
+  if (m) m.remove();
+}
+
+function renderAch() {
+  const box = document.getElementById('achList');
+  if (!box) return;
+  const entries = [];
+  Object.keys(state.achieved || {}).forEach(id => {
+    const p = id.split('_ach');
+    if (p.length !== 2) return;
+    const t = state.tasks.find(x => x.id === p[0]);
+    if (!t) return;
+    const tier = parseInt(p[1], 10);
+    entries.push({ at: state.achieved[id] || 0, task: t, tier: tier, title: achTitleFor(t, tier) });
+  });
+  entries.sort((a, b) => b.at - a.at);
+  if (!entries.length) {
+    box.innerHTML = '<div class="empty">Пока ни одной ачивки — они ждут тебя! 🏅</div>';
+    return;
+  }
+  let html = '<div class="ach-grid">';
+  entries.forEach(e => {
+    const medal = TIER_MEDALS[(e.tier - 1) % TIER_MEDALS.length];
+    html += '<div class="ach"><div class="e">' + e.task.emoji + '</div><div class="t">' + escapeHtml(e.title) + '</div><div class="m">' + medal + ' ×' + (e.tier * ACH_TIER) + '</div></div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
 }
 
 function escapeHtml(s) {
