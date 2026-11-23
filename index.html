@@ -79,6 +79,9 @@
   .reward .info { flex: 1; }
   .reward .name { font-weight: 700; }
   .reward .price { color: #f39c12; font-weight: 800; font-size: 13px; }
+  .reward .pbar { margin-top: 6px; height: 8px; background: #efeaff; border-radius: 99px; overflow: hidden; }
+  .reward .pbar > div { height: 100%; background: linear-gradient(90deg, #6c5ce7, #a55eea); border-radius: 99px; transition: width .5s; }
+  .reward .prest { font-size: 11px; color: #9b8fc4; font-weight: 700; text-align: right; margin-top: 2px; }
 
   .stat { display: flex; justify-content: space-between; padding: 10px 4px; border-bottom: 1px dashed #eee7ff; font-size: 15px; }
   .stat:last-child { border-bottom: none; }
@@ -246,6 +249,8 @@
         <button class="btn btn-buy" onclick="addReward()">Добавить</button>
       </div>
     </div>
+    <div class="section-title">Все награды</div>
+    <div class="card" id="rewardManager"></div>
     <div class="section-title">Оформление</div>
     <div class="card">
       <div class="form-row">
@@ -376,6 +381,7 @@ function render() {
   const doneNow = Object.keys(state.doneToday).filter(id => todayTasks.some(t => t.id === id)).length;
   document.getElementById('doneCount').textContent = doneNow + ' из ' + todayTasks.length;
   renderTaskManager();
+  renderRewardManager();
   renderCalendar();
 
   // shop
@@ -384,8 +390,15 @@ function render() {
   state.rewards.forEach(r => {
     const div = document.createElement('div');
     div.className = 'card reward';
+    const pct = Math.max(0, Math.min(100, Math.round(state.points / r.price * 100)));
+    const enough = state.points >= r.price;
     div.innerHTML = '<div class="emoji">' + r.emoji + '</div>' +
-      '<div class="info"><div class="name">' + escapeHtml(r.name) + '</div><div class="price">' + r.price + ' баллов</div></div>';
+      '<div class="info"><div class="name">' + escapeHtml(r.name) + '</div><div class="price">' + r.price + ' баллов</div>' +
+      '<div class="pbar"><div style="width:' + pct + '%"></div></div>' +
+      (enough
+        ? '<div class="prest" style="color:#27ae60">Достаточно баллов! 🎉</div>'
+        : '<div class="prest">осталось ' + (r.price - state.points) + ' баллов</div>') +
+      '</div>';
     const btn = document.createElement('button');
     btn.className = 'btn btn-buy';
     btn.textContent = 'Купить';
@@ -734,6 +747,38 @@ function addReward() {
   ['newRewardEmoji', 'newRewardName', 'newRewardPrice'].forEach(id => document.getElementById(id).value = '');
   showToast('Награда добавлена 🎁');
   render();
+}
+
+function deleteReward(id) {
+  const r = state.rewards.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm('Удалить награду «' + r.name + '»?')) return;
+  state.rewards = state.rewards.filter(x => x.id !== id);
+  showToast('Награда удалена 🗑️');
+  render();
+}
+
+function renderRewardManager() {
+  const rm = document.getElementById('rewardManager');
+  if (!rm) return;
+  rm.innerHTML = '';
+  if (!state.rewards.length) {
+    rm.innerHTML = '<div class="empty">Наград пока нет — добавьте первую!</div>';
+    return;
+  }
+  state.rewards.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'mrow';
+    row.innerHTML = '<span style="font-size:22px">' + r.emoji + '</span>' +
+      '<div class="info"><div style="font-weight:700">' + escapeHtml(r.name) + '</div>' +
+      '<div class="sched">' + r.price + ' б.</div></div>';
+    const de = document.createElement('button');
+    de.className = 'mini del';
+    de.textContent = '🗑️';
+    de.onclick = () => deleteReward(r.id);
+    row.appendChild(de);
+    rm.appendChild(row);
+  });
 }
 
 function renameChild() {
