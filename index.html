@@ -2,6 +2,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#6c5ce7">
 <title>Семейные квесты ✨</title>
@@ -82,10 +85,9 @@
   .pbar { margin-top: 6px; height: 8px; background: #efeaff; border-radius: 99px; overflow: hidden; }
   .pbar > div { height: 100%; background: linear-gradient(90deg, #6c5ce7, #a55eea); border-radius: 99px; transition: width .5s; }
   .prest { font-size: 11px; color: #9b8fc4; font-weight: 700; text-align: right; margin-top: 2px; }
-  .ach-lanes { margin-top: 8px; }
-  .ach-lane { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #eee7ff; }
-  .ach-lane:last-child { border-bottom: none; }
-  .ach-lane .e { font-size: 24px; }
+  .ach-lane { display: flex; align-items: center; gap: 12px; }
+  .ach-lane .e { font-size: 28px; }
+  .ach-lane .info { flex: 1; }
   .ach-lane .t { font-size: 13px; font-weight: 800; }
 
   .stat { display: flex; justify-content: space-between; padding: 10px 4px; border-bottom: 1px dashed #eee7ff; font-size: 15px; }
@@ -241,7 +243,9 @@
   <!-- АЧИВКИ -->
   <section id="view-ach" class="hide">
     <div class="section-title">Мои ачивки</div>
-    <div class="card" id="achList"></div>
+    <div class="card" id="achGrid"></div>
+    <div class="section-title">Ачивки в пути</div>
+    <div id="achLanes"></div>
   </section>
 
   <!-- РОДИТЕЛЯМ -->
@@ -312,6 +316,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const STORE_KEY = 'familyQuest_v1';
+const APP_VERSION = 6;
 const LEVEL_STEP = 100;
 const IS_KID = new URLSearchParams(location.search).get('mode') === 'kid';
 const SUPABASE_URL = 'https://bihpuukwopbgfyrvakiv.supabase.co';
@@ -985,7 +990,7 @@ async function pullCloud(initial) {
 function setCloudStatus(on) {
   const el = document.getElementById('cloudStatus');
   if (!el) return;
-  el.textContent = on === true ? '☁️ облако подключено' : on === 'loading' ? '☁️ подключение…' : '';
+  el.textContent = on === true ? '☁️ облако подключено · v' + APP_VERSION : on === 'loading' ? '☁️ подключение…' : '';
 }
 
 const ACH_TIER = 5;
@@ -1061,8 +1066,9 @@ function closeAchModal() {
 }
 
 function renderAch() {
-  const box = document.getElementById('achList');
-  if (!box) return;
+  const g = document.getElementById('achGrid');
+  const lanes = document.getElementById('achLanes');
+  if (!g || !lanes) return;
   const entries = [];
   Object.keys(state.achieved || {}).forEach(id => {
     const p = id.split('_ach');
@@ -1073,18 +1079,17 @@ function renderAch() {
     entries.push({ at: state.achieved[id] || 0, task: t, tier: tier, title: achTitleFor(t, tier) });
   });
   entries.sort((a, b) => b.at - a.at);
-  let html = '';
   if (entries.length) {
-    html += '<div class="ach-grid">';
+    let html = '<div class="ach-grid">';
     entries.forEach(e => {
       const medal = TIER_MEDALS[(e.tier - 1) % TIER_MEDALS.length];
       html += '<div class="ach"><div class="e">' + e.task.emoji + '</div><div class="t">' + escapeHtml(e.title) + '</div><div class="m">' + medal + ' ×' + (e.tier * ACH_TIER) + '</div></div>';
     });
-    html += '</div>';
+    g.innerHTML = html + '</div>';
   } else {
-    html += '<div class="empty">Пока ни одной ачивки — они ждут тебя! 🏅</div>';
+    g.innerHTML = '<div class="empty">Пока ни одной ачивки — они ждут тебя! 🏅</div>';
   }
-  html += '<div class="section-title" style="margin-top:14px">Ачивки в пути</div><div class="ach-lanes">';
+  let html = '';
   state.tasks.forEach(t => {
     const c = state.perCounts[t.id] || 0;
     const nextTier = Math.floor(c / ACH_TIER) + 1;
@@ -1092,12 +1097,11 @@ function renderAch() {
     const doneNow = c - (nextTier - 1) * ACH_TIER;
     const pct = Math.max(0, Math.min(100, Math.round(doneNow / ACH_TIER * 100)));
     const medal = TIER_MEDALS[(nextTier - 1) % TIER_MEDALS.length];
-    html += '<div class="ach-lane"><span class="e">' + t.emoji + '</span><div class="info"><div class="t">' + escapeHtml(achTitleFor(t, nextTier)) + ' <span class="m">' + medal + '</span></div>' +
+    html += '<div class="card ach-lane"><span class="e">' + t.emoji + '</span><div class="info"><div class="t">' + escapeHtml(achTitleFor(t, nextTier)) + ' <span class="m">' + medal + '</span></div>' +
       '<div class="pbar"><div style="width:' + pct + '%"></div></div>' +
       '<div class="prest">осталось ' + (need - c) + ' раз</div></div></div>';
   });
-  html += '</div>';
-  box.innerHTML = html;
+  lanes.innerHTML = html;
 }
 
 function escapeHtml(s) {
